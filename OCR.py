@@ -253,23 +253,40 @@ def identification_data_resume(page):
     #Séparation ligne par des espaces
     split_line = line_spec.split()
     #Identification du mot spécialité dans la liste
-    spe_word = process.extractOne('spécialité',split_line)[0]
+≈    spe_word = process.extractOne('spécialité',split_line)[0]
     index = split_line.index(spe_word)
     liste_filtered = split_line[index+1:]
     spe = ' '.join(liste_filtered)
     specialite = convert_speciality_to_acronym(spe)
     return credit,periode,specialite
 
-def convert_speciality_to_acronym(specialite):
-    dict_specialite = {
+def convert_speciality_to_acronym(speciality):
+    """
+    Convert the name of engineer speciality identify on raw text data into 
+    the acronym used at UTC and defined in dict_speciality
+    
+    Parameters
+    ----------
+    speciality : str
+        Word in the raw text data identify as engineer speciality
+
+    Returns
+    -------
+    acronym : str
+        Acronym corresponding to speciality based on variable dict_speciality
+        which link each speciality to his acronym.
+
+    """
+    dict_speciality = {
         'biologie':'GB',
         'informatique':'GI',
         'mécanique':'GM',
         'procédés':'GP',
         'urbain':'GSU',
         }
-    spe_identifiee = process.extractOne(specialite,dict_specialite.keys())
-    acronym = dict_specialite[spe_identifiee[0]]
+    identified_speciality = process.extractOne(speciality,\
+                                               dict_speciality.keys())
+    acronym = dict_speciality[identified_speciality[0]]
     return acronym
     
 def clean_data(i,page):
