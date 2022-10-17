@@ -144,6 +144,26 @@ def identification_semestre_etranger(page):
     return borne_fin,credits_etranger
 
 def acronyme_semestre(word):
+    """
+    Return letter 'P' for 'printemps' or a similar word and 'A' for 'automne'
+    or a similar word. Word are considered similar if fuzz.ratio > 80.
+    If no fuzz.ratio are at least superior to 80 return error because the input
+    word is not considered enough close to 'printemps' or 'automne' which 
+    should always be the case
+
+    Parameters
+    ----------
+    word : str
+        Word corresponding to semester period type extracted from 
+        raw text data
+
+    Returns
+    -------
+    str
+        Letter 'P' corresponding to 'printemps' or 
+        Letter 'A' corresponding to 'automne'.
+
+    """
     if fuzz.ratio(word,'printemps') > 80:
         return 'P'
     elif fuzz.ratio(word,'automne') > 80:
