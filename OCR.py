@@ -333,7 +333,21 @@ def clean_data(i,page):
     """
     return split_text
 
-def recognize_letter(line):
+def detect_first_letter(line):
+    """
+    Detect the index of the first letter in the line given as argument
+
+    Parameters
+    ----------
+    line : str
+        Line extracted from raw text data and separated by \n.
+
+    Returns
+    -------
+    int
+        Index of the first letter in the line.
+
+    """
     for i,character in enumerate(line):
         if character.isalpha() or character in ['1','!'] :
             return i
@@ -358,7 +372,7 @@ def clean_line(line):
         '!':'1',
         }
     #Reconnaissance du premier caractère qui est une lettre
-    index_letter = recognize_letter(line)
+    index_letter = detect_first_letter(line)
     base = line[index_letter:index_letter+4]
     #Boucle sur les 4 caracteres:
     for i,character in enumerate(base):
