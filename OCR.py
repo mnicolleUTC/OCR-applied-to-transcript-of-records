@@ -184,6 +184,9 @@ def determination_periode_with_indice(liste_indice,liste_scanned):
     return periode
     
 def convert_period_to_acronym(periode):
+    """
+    testgitv2
+    """
     #4 elements dans la liste
     result = '{0}{1}-{2}{3}'.format(acronyme_semestre(periode[0]),\
                                     periode[1][-2:],\
