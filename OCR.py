@@ -7,16 +7,15 @@ https://github.com/mnicolleUTC/OCR-applied-to-transcript-of-records.git
 @author: nicollemathieu
 """
 
-import sys
 import os
-import cv2
 import re
+import sys
+import pandas as pd
 import pytesseract
 import unidecode
-import pandas as pd
-from pdf2image import convert_from_path
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
+from pdf2image import convert_from_path
 
 
 def convert_pdf(pdf_path,dpi_val,save_image = False,save_raw_text = False):
@@ -104,6 +103,7 @@ def identify_name(raw_text_data):
     return student_name
     
 def identification_semestre_etranger(page):
+
     #Permet d'dentifier si un semestre à été effectué à l'étranger
     pattern_etranger = "Enseignements suivis dans le cadre de semestres "\
               "d'études a l'étranger"
@@ -184,7 +184,25 @@ def determination_periode_with_indice(liste_indice,liste_scanned):
     return periode
     
 def convert_period_to_acronym(periode):
-    #4 elements dans la liste
+    """
+    Convert a list of four elements corresponding to semester's types and
+    associated years in four digit format into an acronym with format XYY-XYY
+    (X the letter corresponding to semester type and Y the year expressed in
+    two digits format). Example convert the list :
+    ["le printemps", '2011', "l'automne", '2016,'] into "P11-A16"
+
+    Parameters
+    ----------
+    periode : list
+        List containing the type and the year for beginning and end of
+        schooling
+
+    Returns
+    -------
+    result = str
+        Acronym which indicates the beginning and end of schooling
+
+    """
     result = '{0}{1}-{2}{3}'.format(acronyme_semestre(periode[0]),\
                                     periode[1][-2:],\
                                     acronyme_semestre(periode[2]),\
@@ -273,7 +291,7 @@ def identification_data_resume(page):
     #Séparation ligne par des espaces
     split_line = line_spec.split()
     #Identification du mot spécialité dans la liste
-≈    spe_word = process.extractOne('spécialité',split_line)[0]
+    spe_word = process.extractOne('spécialité',split_line)[0]
     index = split_line.index(spe_word)
     liste_filtered = split_line[index+1:]
     spe = ' '.join(liste_filtered)
@@ -444,8 +462,8 @@ if __name__ == '__main__':
     file = '/Users/nicollemathieu/Desktop/Halouf_documents/Clean_transcript/fanfan.pdf'
     name_outfile = '/Users/nicollemathieu/Desktop/coucou.csv'
     list_pages = convert_pdf(file,600)
-    """
     df = extract_data(list_pages)
+    """
     print(df)
     df.to_csv(name_outfile,index = False)
     """
