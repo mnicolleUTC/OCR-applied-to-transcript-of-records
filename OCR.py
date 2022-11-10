@@ -40,7 +40,7 @@ def convert_pdf(pdf_path,dpi_val,save_image = False,save_raw_text = False):
     Returns
     -------
     list_pages : list
-        List containing raw text data extracted with tesseract OCR from each 
+        List containing raw text data extracted with tesseract OCR from each
         pdf page
     """
     main_dir = os.getcwd()
@@ -103,45 +103,55 @@ def identify_name(raw_text_data):
     return student_name
     
 def identification_semestre_etranger(page):
+    """
+    Identify if the student has study a semester abroad.
+    In this case identify the country and number of credits earned during this
+    period
 
-    #Permet d'dentifier si un semestre à été effectué à l'étranger
-    pattern_etranger = "Enseignements suivis dans le cadre de semestres "\
-              "d'études a l'étranger"
+    Parameters
+    ----------
+    page : str
+        Raw text data extracted with tesseract OCR from first page
+
+    Returns
+    -------
+    erasmus_credits : int
+        Number of credits earned by the student during his erasmus
+    erasmus_destination : str
+        Country of erasmus semester
+    """
+    #Identify if the student has study a semester abroad.
+    pattern_erasmus = "Enseignements suivis dans le cadre de semestres "\
+                      "d'études a l'étranger"
     pattern_date = "Fait a Compiegne, le"
     ratio_id = 80
-    credits_etranger = 0
+    erasmus_credits = 0
     split_text = page.split('\n')
-    line_borne = process.extractOne(pattern_etranger, split_text,\
+    #Identify sentence prior erasmus information
+    line_pattern = process.extractOne(pattern_erasmus, split_text,\
                                     scorer = fuzz.token_sort_ratio)
-    #Si comparaison supérieur à 80% acceptation du semestre à l'étranger
-    if line_borne[1] > ratio_id:
-        borne_fin = pattern_etranger
-    else :
-        borne_fin = pattern_date
-        return borne_fin,credits_etranger
-    #Identification du nombre de crédits validé à l'étranger
-    bornes = ["Pays Université Crédits",pattern_date]
-    indice = []
-    for b in bornes:
-        line_borne = process.extractOne(b, split_text,\
+    #Erasmus semester identified if fuzzywuzzy score superior to ratio_id else
+    #exit of the function
+    if line_pattern[1] < ratio_id:
+        erasmus_credits = 0
+        erasmus_destination = "None"
+        return erasmus_credits,erasmus_destination
+    #Identitify erasmus destination and credits
+    delimiters = ["Pays Université Crédits","Fait a Compiegne, le"]
+    index_delimiters = []
+    for d in delimiters:
+        line_pattern = process.extractOne(d, split_text,\
                                         scorer=fuzz.token_sort_ratio)
-        indice.append(split_text.index(line_borne[0]))
-    #Filtre de la liste en fonction des indices identifiés
-    split_text = split_text[indice[0]+1:indice[1]]
-    #Normalement 1 seule ligne dans la liste
-    #Clean element of list if before test
-    for i,elt in enumerate(split_text):
-        if len(elt) < 10:
-            del(split_text[i])
-    if len(split_text) == 1 :
-        line = split_text[0]
-    else:
-        print("Erreur pour l'identification des crédits à l'étranger")
-        #Attention à refaire très mal fait actuellement  tout ce bloc d'identification du semestre à l'étrange etc...
-        borne_fin = pattern_date
-        credits_etranger 
-        return borne_fin,credits_etranger
-    return borne_fin,credits_etranger
+        index_delimiters.append(split_text.index(line_pattern[0]))
+    #Filtering split_text to retain only erasmus information
+    split_text = split_text[index_delimiters[0]+1:index_delimiters[1]]
+    erasmus_information = [elt for elt in split_text if elt][0]
+    split_erasmus = re.split(',|\s', erasmus_information)
+    #Fetch country by taking first element of the list
+    erasmus_destination = split_erasmus[0]
+    #Fetch erasmus credits which is the last number of the list
+    erasmus_credits = int([num for num in split_erasmus if num.isdigit()][-1])
+    return erasmus_credits,erasmus_destination
 
 def acronyme_semestre(word):
     """
@@ -332,7 +342,7 @@ def clean_data(i,page):
     if i == 0:
         bornes = ["Enseignements UTC Note ECTS Crédits","page 1 de 2"]
     elif i == 1:
-        #borne_fin, credits_etranger = identification_semestre_etranger(page)
+        borne_fin, credits_etranger = identification_semestre_etranger(page)
         bornes = ['Enseignements UTC (suite ...) Note ECTS  Crédits'\
                   ,"page 2 sur 2"]
     else:
@@ -459,7 +469,7 @@ def extract_data(list_pages):
     return df
         
 if __name__ == '__main__':
-    file = '/Users/nicollemathieu/Desktop/Halouf_documents/Clean_transcript/fanfan.pdf'
+    file = '/Users/nicollemathieu/Desktop/Halouf_documents/Clean_transcript/Nicolle.pdf'
     name_outfile = '/Users/nicollemathieu/Desktop/coucou.csv'
     list_pages = convert_pdf(file,600)
     df = extract_data(list_pages)
