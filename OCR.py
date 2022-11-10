@@ -20,7 +20,8 @@ from pdf2image import convert_from_path
 
 def convert_pdf(pdf_path,dpi_val,save_image = False,save_raw_text = False):
     """
-    Extract text from pdf file into a list of image (jpeg format)
+    Transform pdf file into a list of str in which each element
+    contains the raw text data obtained with OCR tool
 
     Parameters
     ----------
@@ -89,7 +90,7 @@ def identify_student_name(raw_text_data):
     split_text = raw_text_data.split('\n')
     #Filter empty string from list
     split_text = list(filter(None,split_text))
-    #Identify sentence before name 
+    #Identify sentence before student's name
     pattern_intro = 'Le directeur de l\'université de technologie de '\
                     'Compiègne (UTC), soussigné, certifie que'
     index_line_pattern = split_text.index(process.extractOne(pattern_intro,\
@@ -102,7 +103,7 @@ def identify_student_name(raw_text_data):
     student_name = split_line_name[0].lower() + '_' + split_line_name[1].lower()
     return student_name
     
-def identification_semestre_etranger(page):
+def identify_erasmus_semester(page):
     """
     Identify if the student has study a semester abroad.
     In this case identify the country and number of credits earned during this
@@ -306,7 +307,8 @@ def identify_student_information(first_page):
                                     scorer = fuzz.token_sort_ratio)
     #Fetch the index corresponding to the identified line
     index_line_intro = split_text.index(line_intro[0])
-    full_line = split_text[index_line_intro]+ ' ' + split_text[index_line_intro+1]
+    full_line = split_text[index_line_intro]+ ' ' + \
+                split_text[index_line_intro+1]
     #Split the intro line based on space
     split_line = full_line.split()
     ### First block : Identification of the education period
@@ -413,30 +415,6 @@ def acronym_speciality(speciality):
                                                dict_speciality.keys())
     acronym = dict_speciality[identified_speciality[0]]
     return acronym
-    
-def clean_data(i,page):
-    #Definition des bornes de séaration du texte
-    if i == 0:
-        bornes = ["Enseignements UTC Note ECTS Crédits","page 1 de 2"]
-    elif i == 1:
-        borne_fin, credits_etranger = identification_semestre_etranger(page)
-        bornes = ['Enseignements UTC (suite ...) Note ECTS  Crédits'\
-                  ,borne_fin]
-    else:
-        print("Erreur 3 pages détectées")
-        sys.exit()
-    #Identification de la ligne correspndante with fuzzy wuzzy
-    split_text = page.split('\n')
-    """
-    indice = []
-    for b in bornes:
-        line_borne = process.extractOne(b, split_text,\
-                                        scorer=fuzz.token_sort_ratio)
-        indice.append(split_text.index(line_borne[0]))
-    #Filtre de la liste en fonction des indices identifiés
-    split_text = split_text[indice[0]+1:indice[1]]
-    """
-    return split_text
 
 def detect_first_letter(line):
     """
@@ -458,7 +436,7 @@ def detect_first_letter(line):
             return i
     return 0
 
-def clean_line(line):
+def clean_subject_code(line):
     """
     Clean line extracted from transcript of records spreadsheet in order to
     obtain the code associated to the university subject which is always
@@ -468,8 +446,8 @@ def clean_line(line):
     Parameters
     ----------
     line : str
-        Line extracted from transcript of records table which contains two key
-        information : the subject code and the grade the student receive
+        Line extracted from transcript of records spreadsheet which contains
+        two key information : the subject code and the grade the student receive
 
     Returns
     -------
@@ -509,73 +487,135 @@ def clean_line(line):
     cleaned_line = subject_code + line[index_letter+4:]
     return cleaned_line
 
-def identification_uv(motif_regex,line,interrupteur = 0):
-    uv = re.findall(motif_regex,line)
-    if len(uv) == 1:
-        #Test sur existance du pattern
-        uv = uv[0]          
-    elif interrupteur == 0:
-        #Test of change pattern
-        line = clean_line(line)
-        interrupteur = 1
-        uv = identification_uv(motif_regex,line,interrupteur=1)
+def identify_subject_code(subject_pattern,line,switch = 0):
+    """
+    Identify subject code contains in the input line extracted from transcript
+    of records spreadsheet.
+
+    Parameters
+    ----------
+    subject_pattern : str
+        Regular expression representing subject pattern
+    line :
+        Line extracted from transcript of records spreadsheet
+    switch : bool, optional
+        Variable indicating if function clean_line has already been used.
+        The default is False.
+
+    Returns
+    -------
+    subject_code : str
+        Subject code extracted from input line
+    """
+    subject_code = re.findall(subject_pattern,line)
+    #Testing if subject_pattern has been detected directly without cleaning
+    if len(subject_code) == 1:
+        subject_code = subject_code[0]
+    #If no pattern detected, new try with a cleaned line
+    elif switch == 0:
+        #Cleaning line from common OCR recognition errors
+        line = clean_subject_code(line)
+        switch = 1
+        subject_code = identify_subject_code(subject_pattern,line,switch = 1)
+    #If no pattern detected after cleaning, considering subject code "xxxx"
+    #corresponding to an error.
     else:
-        #Else after change pattern : xxxx
-        uv= "xxxx"
-    return uv
+        subject_code= "xxxx"
+    return subject_code
     
 def extract_line_data(line):
-    #Suppression des accents dans chaque string
+    """
+    Extract key information (subject code and associated grade) from input
+    line extracted from transcript of records spreadsheet.
+
+    Parameters
+    ----------
+    line : str
+        Line extracted from transcript of records spreadsheet
+
+    Returns
+    -------
+    subject_code : str
+        Subject code extracted from input line
+    grade : str
+        Grade obtained by the student for this subject code
+    """
+    #Cleaning all accents in the line
     line = unidecode.unidecode(line)
-    #Identification UV Regex : 2 majuscules suivis de 2 chiffres
-    motif_regex_uv = r"[A-Z]{2}[0-9]{2}"
-    uv = identification_uv(motif_regex_uv,line,interrupteur = 0)
-    #Identification nombre de credit
-    if line.split()[-1].isdigit(): #Test sur l'identification d'un chiffre
-        credit = int(line.split()[-1])
-    else: #Si pas identifié alors on mets 99
-        credit = 99
-    #Identification de la note
-    motif_regex_note = r" [a-eA-EG] "
-    #Extract only last maj letter of the line
-    liste_maj = re.findall(motif_regex_note,line)
-    #Test on the existence of one element in the list
-    if liste_maj:
-        note = liste_maj[-1][1]
-        #Change for C analysed as c
+    #Defining which pattern correspond to subject code : two uppercase letters
+    #followed by two digits
+    subject_pattern = r"[A-Z]{2}[0-9]{2}"
+    subject_code = identify_subject_code(subject_pattern,line)
+    #Defining which pattern correspond to a grade (letter in lowercase or
+    #uppercase between A and E. G in uppercase consider as "C"
+    grade_pattern = r" [a-eA-EG] "
+    #Extract all letters corresponding to grade_pattern
+    grade_candidates = re.findall(grade_pattern,line)
+    #Testing if at least one element is in grade_candidates
+    if grade_candidates:
+        #Fetching last element of grade_candidates
+        grade = grade_candidates[-1]
+        #Cleaning unwanted spaces and capitalize if possible
+        grade = grade.replace(" ","").upper()
+        #Change "G" for "C" if possible because classic OCR recognition errors
+        if grade == "G" : grade = "C"
     else:
-        note = 'Z'
-    return uv,credit,note
+        #'Z' corresponds to an error in grade recognition
+        grade = 'Z'
+    return subject_code,grade
     
-def extract_data(list_pages):
-    df = pd.DataFrame(columns=('UV','NOTE'))
+def extract_data(file_path):
+    """
+    Convert the data contained in a transcript of records in pdf-format into
+    a pandas dataframe
+
+    Parameters
+    ----------
+    file_path : str
+        Absolute path of transcript of records in pdf-format
+
+    Returns
+    -------
+    df : pandas.DataFrame
+        Dataframe containing key information in the transcript of records
+        (subject code and associated grade). It also contains information on
+        erasmus semester, total student's credits, period of education and
+        engineer speciality
+    """
+    #Reading transcript of record with OCR tool and convert it into
+    #raw text data
+    list_pages = convert_pdf(file_path,600)
+    # Initialize dataframe
+    df = pd.DataFrame(columns=('Subject_code', 'Grade'))
+    # Iterating through each page contained in pdf file
     for i,page in enumerate(list_pages):
+        # For first page identify key information about the student
         if i == 0:
-            credit_total,periode,specialite = identify_student_information(page)
+            credit_number,period,speciality = identify_student_information(page)
+        # For second page identify whether a semester was spent abroad
         elif i == 1:
-            borne_fin,credits_etranger = identification_semestre_etranger(page)
-            print(credits_etranger)
+            erasmus_credits,erasmus_country = identify_erasmus_semester(page)
+        # No transcript of records can have 3 pages
         else:
             print("42 You're a God")
             sys.exit()
         split_text = page.split('\n')
+        # Iterating through spreadsheets lines to extract subject code and
+        # associated grade
         for line in split_text:
-            #Test qu'au moins un élément soit présent dans la liste sinon next
-            if not line.split():
-                continue
-            #On recupere le nombre de crédit mais non valorisé car aléatoire
-            uv,credit,note = extract_line_data(line)
-            df.loc[df.shape[0]] = [uv,note]
-    #Ajout des lignes de fin du dataframe
-    df.loc[df.shape[0]] = ['TOTA','{0};{1}'.format(periode,str(credit_total))]
-    df.loc[df.shape[0]] = ['SPEC',f'{specialite}']
+            subject_code,grade = extract_line_data(line)
+            df.loc[df.shape[0]] = [subject_code,grade]
+    # Adding resume information on the student at the end of dataframe
+    df.loc[df.shape[0]] = ['PERIOD',f'{period}']
+    df.loc[df.shape[0]] = ['TOTAL_CREDITS', f'{credit_number}']
+    df.loc[df.shape[0]] = ['SPECIALITY',f'{speciality}']
+    df.loc[df.shape[0]] = ['ERASMUS_CREDITS', f'{erasmus_credits}']
+    df.loc[df.shape[0]] = ['ERASMUS_COUNTRY', f'{erasmus_country}']
     return df
         
 if __name__ == '__main__':
-    file = '/Users/nicollemathieu/Desktop/Halouf_documents/Clean_transcript/Nicolle.pdf'
-    name_outfile = '/Users/nicollemathieu/Desktop/coucou.csv'
-    list_pages = convert_pdf(file,600)
-    df = extract_data(list_pages)
+    file = '/Users/nicollemathieu/Desktop/Halouf_documents/Clean_transcript/'\
+           'Nicolle.pdf'
+    df = extract_data(file)
     print(df)
-    df.to_csv(name_outfile,index = False)
 
