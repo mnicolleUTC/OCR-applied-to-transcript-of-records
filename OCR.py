@@ -451,7 +451,26 @@ def detect_first_letter(line):
     return 0
 
 def clean_line(line):
-    #Definition des cas de remplacement de lettre et chiffre séparement
+    """
+    Clean line extracted from transcript of records spreadsheet in order to
+    obtain the code associated to the university subject which is always
+    defined by 2 uppercase letters and 2 digits. This function is
+    mandatory in order to clean slight errors from OCR recognition.
+
+    Parameters
+    ----------
+    line : str
+        Line extracted from transcript of records table which contains two key
+        information : the subject code and the grade the student receive
+
+    Returns
+    -------
+    cleaned_line : str
+        Line in which characters corresponding subject code has been cleaned
+        from common OCR recognition errors
+    """
+    #Dictionnary giving common corrections for the 2 first letters of subject
+    #code
     clean_letter = {
         '0':'O',
         'o':'O',
@@ -460,6 +479,7 @@ def clean_line(line):
         'i':'I',
         'l':'I',
         }
+    #Dictionnary giving common corrections for the 2 last digits of subject code
     clean_number = {
         'O':'0',
         'o':'0',
@@ -468,18 +488,18 @@ def clean_line(line):
         'l':'1',
         '!':'1',
         }
-    #Reconnaissance du premier caractère qui est une lettre
+    #Identify the first letter of the line in order to extract subject code
     index_letter = detect_first_letter(line)
-    base = line[index_letter:index_letter+4]
-    #Boucle sur les 4 caracteres:
-    for i,character in enumerate(base):
-        if i in [0,1] and character in clean_letter.keys():
-            base = base.replace(character,clean_letter[character])
-        elif i in [2,3] and character in clean_number.keys():
-            base = base.replace(character,clean_number[character])
-    #Remplacement dans la ligne du sigle
-    line = base + line[index_letter+4:]
-    return line
+    subject_code = line[index_letter:index_letter+4]
+    #Trying to correct each character of subject_code
+    for i,char in enumerate(subject_code):
+        if i in [0,1] and char in clean_letter.keys():
+            subject_code = subject_code.replace(char,clean_letter[char])
+        elif i in [2,3] and char in clean_number.keys():
+            subject_code = subject_code.replace(char,clean_number[char])
+    #Replacement in the original line of corrected subject code
+    cleaned_line = subject_code + line[index_letter+4:]
+    return cleaned_line
 
 def identification_uv(motif_regex,line,interrupteur = 0):
     uv = re.findall(motif_regex,line)
