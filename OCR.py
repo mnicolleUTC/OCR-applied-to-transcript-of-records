@@ -56,7 +56,7 @@ def convert_pdf(pdf_path,dpi_val,save_image = False,save_raw_text = False):
                                           lang = 'fra')
         #Extract student name in the first page for saving purpose
         if i == 1:
-            student_name = identify_name(txt)
+            student_name = identify_student_name(txt)
         #Saving data if option(s) activated
         if save_image or save_raw_text:
             save_folder = os.path.join(main_dir,"log_folder")
@@ -71,14 +71,14 @@ def convert_pdf(pdf_path,dpi_val,save_image = False,save_raw_text = False):
         list_pages.append(txt)
     return list_pages
 
-def identify_name(raw_text_data):
+def identify_student_name(raw_text_data):
     """
-    Identify student's name from raw text data extrated with tesseract OCR
+    Identify student's name from raw text data extracted with tesseract OCR
 
     Parameters
     ----------
     raw_text_data : str
-        Raw text data extrated with tesseract OCR
+        Raw text data extracted with tesseract OCR
 
     Returns
     -------
@@ -153,7 +153,7 @@ def identification_semestre_etranger(page):
     erasmus_credits = int([num for num in split_erasmus if num.isdigit()][-1])
     return erasmus_credits,erasmus_destination
 
-def acronyme_semestre(word):
+def acronym_semester(word):
     """
     Return letter 'P' for 'printemps' or a similar word and 'A' for 'automne'
     or a similar word. Word are considered similar if fuzz.ratio > 80.
@@ -181,19 +181,38 @@ def acronyme_semestre(word):
     else:
         return 'ERROR'
     
-def determination_periode_with_indice(liste_indice,liste_scanned):
-    #Sorting of the index by ascending order
-    liste_indice.sort()
-    #Fetching 4 word corresponding to semester and year of beginning and end of study
-    periode = [
-        liste_scanned[liste_indice[0]],
-        liste_scanned[liste_indice[0]+1],
-        liste_scanned[liste_indice[1]],
-        liste_scanned[liste_indice[1]+1],        
+def identify_education_periode(list_index,list_text_extract):
+    """
+    Identify education period of the student
+
+    Parameters
+    ----------
+    list_index : list
+        Contains the word's index corresponding to a semester in
+        list_text_extract
+    list_text_extract : list
+        Contains words of the introduction which describes the education period
+        of the student
+    Returns
+    -------
+    education_period : list
+        List containing 4 elements described as follows :
+        ['type_of_begin_semester','year_of_begin_semester',
+        'type_of_end_semester','year_of_end_semester']
+    """
+    #Sorting of the list index by ascending order
+    list_index.sort()
+    #Fetching 4 word corresponding to semester and year of beginning and end of
+    #study
+    education_period = [
+        list_text_extract[list_index[0]],
+        list_text_extract[list_index[0]+1],
+        list_text_extract[list_index[1]],
+        list_text_extract[list_index[1]+1],
         ]
-    return periode
+    return education_period
     
-def convert_period_to_acronym(periode):
+def convert_education_period_to_acronym(education_period):
     """
     Convert a list of four elements corresponding to semester's types and
     associated years in four digit format into an acronym with format XYY-XYY
@@ -203,112 +222,170 @@ def convert_period_to_acronym(periode):
 
     Parameters
     ----------
-    periode : list
+    education_period : list
         List containing the type and the year for beginning and end of
-        schooling
+        education period
 
     Returns
     -------
     result = str
-        Acronym which indicates the beginning and end of schooling
+        Acronym which indicates the beginning and end of education_period
 
     """
-    result = '{0}{1}-{2}{3}'.format(acronyme_semestre(periode[0]),\
-                                    periode[1][-2:],\
-                                    acronyme_semestre(periode[2]),\
-                                    periode[3][-2:],)
+    result = '{0}{1}-{2}{3}'.format(acronym_semester(education_period[0]),\
+                                    education_period[1][-2:],\
+                                    acronym_semester(education_period[2]),\
+                                    education_period[3][-2:],)
     return result
 
-def identification_periode_double(test_periode,liste_scanned):
-    #Fetching the 2 word from test_periode
-    candidat = [test_periode[0][0],test_periode[1][0]]
-    #2 cases : both word in liste_candidat are the same or are slightly different
-    if candidat[0] == candidat[1]:
+def identify_same_semester_type(semester_type_candidate,list_text_extract):
+    """
+    Identify education period of the student in case of first and last semester
+    of the same type ("printemps" or "automne"). This function is essential
+    because tesseract OCR can slightly misspell semester type hence the test of
+    equality between the two candidates identified by fuzzywuzzy.
+
+    Parameters
+    ----------
+    semester_type_candidate : list
+        List containing the two best candidates identified by fuzzywuzzy package
+        for semester type
+    list_text_extract : list
+        Contains words of the introduction which describes the education period
+        of the student
+
+    Returns
+    -------
+    education_period : list
+        List containing the type and the year for beginning and end of
+        schooling
+    """
+    #Fetching the two candidates words for semester type
+    candidates = [semester_type_candidate[0][0],semester_type_candidate[1][0]]
+    #2 cases: Both word in candidates are the same or are slightly different
+    if candidates[0] == candidates[1]:
         #2 index to be found with only one word
-        indice = [i for i, x in enumerate(liste_scanned) if x == candidat[0]]
+        index = [i for i, x in enumerate(list_text_extract) \
+                 if x == candidates[0]]
     else:
-        indice = [liste_scanned.index(candidat[0]),liste_scanned.index(candidat[1])]
-    periode = determination_periode_with_indice(indice,liste_scanned)
-    return periode
+        index = [
+            list_text_extract.index(candidates[0]),
+            list_text_extract.index(candidates[1])
+        ]
+    education_period = identify_education_periode(index,list_text_extract)
+    return education_period
     
-def identification_data_resume(page):
-    #Permet d'identifier la période des études, le nombre de crédits total 
-    #validés et la spécialité de l'étudiant
-    pattern_periode = "a obtenu, dans le cadre de son inscription à l'UTC"
-    ratio_id = 80
-    split_text = page.split('\n')
-    line_intro = process.extractOne(pattern_periode, split_text,\
+def identify_student_information(first_page):
+    """
+    Identify the basic information of the student (credits, period of education
+    and engineer speciality) which are given on first page of the transcript of
+    records.
+
+    Parameters
+    ----------
+    first_page : str
+        Raw text data extracted with tesseract OCR from first pdf page
+
+    Returns
+    -------
+    credit_number : int
+        Number of credits obtained by the student during his education.
+    period : str
+        Acronym which indicates the beginning and end of education period
+    speciality : str
+        Acronym corresponding to speciality chosen by the student during his
+        studies
+    """
+    #Split raw text data of first page based on line break
+    split_text = first_page.split('\n')
+    #Define the pattern on first page which is before education period
+    pattern_education_period = "a obtenu, dans le cadre de son inscription à "\
+                               "l'UTC"
+    #Extract line which is the closest to variable pattern_education_period
+    line_intro = process.extractOne(pattern_education_period, split_text,\
                                     scorer = fuzz.token_sort_ratio)
+    #Fetch the index corresponding to the identified line
     index_line_intro = split_text.index(line_intro[0])
     full_line = split_text[index_line_intro]+ ' ' + split_text[index_line_intro+1]
+    #Split the intro line based on space
     split_line = full_line.split()
-    #1er bloc: identification de la période d'étude
-    #Extraction des candidats pour chaque mot clés
-    semestre_prin = process.extract("printemps",split_line)
-    semestre_auto = process.extract("l'automne",split_line)
-    #Conservation des 2 meilleurs candidats pour début et fin 
-    liste_candidat = semestre_auto + semestre_prin
+    ### First block : Identification of the education period
+    #Extract candidates for each type of semester
+    semester_prin = process.extract("printemps",split_line)
+    semester_auto = process.extract("l'automne",split_line)
+    #Merge of all the fuzzywuzzy evaluation
+    liste_candidat = semester_auto + semester_prin
+    #Sorting of candidate based on their fuzzywuzzy score
     liste_candidat.sort(key=lambda x: x[1], reverse=True)
+    #Selection of the two best matches
     match = [liste_candidat[0][0],liste_candidat[1][0]]
-    #Determination si match contient 2 printemps, 2 automne ou les deux
+    #Identify if first and last semester are the same type.
     test_prin = process.extract("printemps",match)
     test_auto = process.extract("l'automne",match)
+    #Word are considered similar if fuzz.ratio > 80.
+    ratio_id = 80
     if test_auto [0][1] and test_auto[1][1] > ratio_id:
-        #Cas de deux automnes
-        periode = identification_periode_double(test_auto, split_line)
+        #Case of first and last semesters which are "automne"
+        education_period = identify_same_semester_type(test_auto, split_line)
     elif test_prin [0][1] and test_prin[1][1] > ratio_id:   
-        #Cas de deux printemps
-        periode = identification_periode_double(test_prin, split_line)
+        #Case of first and last semesters which are "printemps"
+        education_period = identify_same_semester_type(test_prin, split_line)
     else:
-        #Cas d'un printemps et d'un automne
-        indice = [
+        #Case with differents semester types
+        index = [
             split_line.index(test_prin[0][0]),
             split_line.index(test_auto[0][0]),
             ]
-        periode = determination_periode_with_indice(indice,split_line)
-    #Convert periode in liste format to str format with acronym
-    periode = convert_period_to_acronym(periode)
-    #2eme bloc : Identification du nombre de crédits
-    #Identification de l'index du mot crédit
+        education_period = identify_education_periode(index,split_line)
+    #Convert education period into acronym
+    period = convert_education_period_to_acronym(education_period)
+    ### Second block : Identification of credits number and student speciality
+    #Look for credits word index
     word_credit = process.extractOne("crédits", split_line)[0]
-    index = split_line.index(word_credit)
+    index_word_credit = split_line.index(word_credit)
     try:
-        credit = int(split_line[index-1])
-        """
-        Attention à refaire
-        """
-        if credit < 130:
-            #Etudiant fini en tronc commun
-            specialite = 'TC'
-            return credit,periode,specialite
+        credit_number = int(split_line[index_word_credit-1])
     except:
         credit = "ERR"
-    
+    #Case student have been expelled
+    if credit_number < 130:
+        speciality = 'TC'
+    #Case student have complete entirely his diploma
+    else:
+        speciality = identify_student_speciality(split_text)
+    return credit_number, period, speciality
+
+def identify_student_speciality(split_text):
     """
-    if credit < 130:
-        #Etudiant fini en tronc commun
-        specialite = 'TC'
-        return credit,periode,specialite
+    Identify student_speciality
+
+    Parameters
+    ----------
+    split_text : list
+        Split raw text data of lines containing student's speciality
+
+    Returns
+    -------
+    speciality : str
+        Acronym corresponding to speciality
     """
-    #3ème bloc : Identification de la spécialité de l'étudiant
     pattern_spec = "étudiant en spécialité"
     line_spec = process.extractOne(pattern_spec, split_text,\
                                 scorer = fuzz.token_sort_ratio)[0]
-    #Determination de l'indice du chiffre dans la phrase
+    #Text treatements
     indice_number = line_spec.find(re.findall('[0-9]',line_spec)[-1])
-    #Suppresion de la phrase du chiffre et de ce qui suit
     line_spec = line_spec[0:indice_number]
-    #Séparation ligne par des espaces
     split_line = line_spec.split()
-    #Identification du mot spécialité dans la liste
+    #Identification of the word "spécialité"
     spe_word = process.extractOne('spécialité',split_line)[0]
     index = split_line.index(spe_word)
     liste_filtered = split_line[index+1:]
-    spe = ' '.join(liste_filtered)
-    specialite = convert_speciality_to_acronym(spe)
-    return credit,periode,specialite
+    speciality = ' '.join(liste_filtered)
+    #Converting speciality into acronym
+    speciality = acronym_speciality(speciality)
+    return speciality
 
-def convert_speciality_to_acronym(speciality):
+def acronym_speciality(speciality):
     """
     Convert the name of engineer speciality identify on raw text data into 
     the acronym used at UTC and defined in dict_speciality
@@ -344,7 +421,7 @@ def clean_data(i,page):
     elif i == 1:
         borne_fin, credits_etranger = identification_semestre_etranger(page)
         bornes = ['Enseignements UTC (suite ...) Note ECTS  Crédits'\
-                  ,"page 2 sur 2"]
+                  ,borne_fin]
     else:
         print("Erreur 3 pages détectées")
         sys.exit()
@@ -382,7 +459,26 @@ def detect_first_letter(line):
     return 0
 
 def clean_line(line):
-    #Definition des cas de remplacement de lettre et chiffre séparement
+    """
+    Clean line extracted from transcript of records spreadsheet in order to
+    obtain the code associated to the university subject which is always
+    defined by 2 uppercase letters and 2 digits. This function is
+    mandatory in order to clean slight errors from OCR recognition.
+
+    Parameters
+    ----------
+    line : str
+        Line extracted from transcript of records table which contains two key
+        information : the subject code and the grade the student receive
+
+    Returns
+    -------
+    cleaned_line : str
+        Line in which characters corresponding subject code has been cleaned
+        from common OCR recognition errors
+    """
+    #Dictionnary giving common corrections for the 2 first letters of subject
+    #code
     clean_letter = {
         '0':'O',
         'o':'O',
@@ -391,6 +487,7 @@ def clean_line(line):
         'i':'I',
         'l':'I',
         }
+    #Dictionnary giving common corrections for the 2 last digits of subject code
     clean_number = {
         'O':'0',
         'o':'0',
@@ -399,18 +496,18 @@ def clean_line(line):
         'l':'1',
         '!':'1',
         }
-    #Reconnaissance du premier caractère qui est une lettre
+    #Identify the first letter of the line in order to extract subject code
     index_letter = detect_first_letter(line)
-    base = line[index_letter:index_letter+4]
-    #Boucle sur les 4 caracteres:
-    for i,character in enumerate(base):
-        if i in [0,1] and character in clean_letter.keys():
-            base = base.replace(character,clean_letter[character])
-        elif i in [2,3] and character in clean_number.keys():
-            base = base.replace(character,clean_number[character])
-    #Remplacement dans la ligne du sigle
-    line = base + line[index_letter+4:]
-    return line
+    subject_code = line[index_letter:index_letter+4]
+    #Trying to correct each character of subject_code
+    for i,char in enumerate(subject_code):
+        if i in [0,1] and char in clean_letter.keys():
+            subject_code = subject_code.replace(char,clean_letter[char])
+        elif i in [2,3] and char in clean_number.keys():
+            subject_code = subject_code.replace(char,clean_number[char])
+    #Replacement in the original line of corrected subject code
+    cleaned_line = subject_code + line[index_letter+4:]
+    return cleaned_line
 
 def identification_uv(motif_regex,line,interrupteur = 0):
     uv = re.findall(motif_regex,line)
@@ -454,8 +551,14 @@ def extract_data(list_pages):
     df = pd.DataFrame(columns=('UV','NOTE'))
     for i,page in enumerate(list_pages):
         if i == 0:
-            credit_total,periode,specialite = identification_data_resume(page)
-        split_text = clean_data(i,page)
+            credit_total,periode,specialite = identify_student_information(page)
+        elif i == 1:
+            borne_fin,credits_etranger = identification_semestre_etranger(page)
+            print(credits_etranger)
+        else:
+            print("42 You're a God")
+            sys.exit()
+        split_text = page.split('\n')
         for line in split_text:
             #Test qu'au moins un élément soit présent dans la liste sinon next
             if not line.split():
@@ -473,7 +576,6 @@ if __name__ == '__main__':
     name_outfile = '/Users/nicollemathieu/Desktop/coucou.csv'
     list_pages = convert_pdf(file,600)
     df = extract_data(list_pages)
-    """
     print(df)
     df.to_csv(name_outfile,index = False)
-    """
+
