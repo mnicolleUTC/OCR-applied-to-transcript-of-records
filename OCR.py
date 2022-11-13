@@ -634,7 +634,7 @@ def extract_data(file_path):
 
 
 if __name__ == '__main__':
-    file = '/Users/nicollemathieu/Desktop/Halouf_documents/Clean_transcript/' \
-           'Nicolle.pdf'
-    dataframe = extract_data(file)
-    print(dataframe)
+    print("Please run program run_analysis.py in order to exploit all "
+          "transcript of records.\nThis file mainly contain the function "
+          "extract_data() which allow to extract data from transcript of "
+          "records in pdf format.")

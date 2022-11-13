@@ -1,3 +1,7 @@
+#Specific to the OCR_project
+Transcript_of_records
+database_result.csv
+
 # Editors
 .vscode/
 .idea/
